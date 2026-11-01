@@ -66,6 +66,7 @@ from .utils import (
     upload_file,
     logger,
 )
+from .utils.generated_video import extract_generated_video_urls
 
 
 class GeminiClient(ChatMixin, GemMixin, ResearchMixin):
@@ -1467,31 +1468,26 @@ class GeminiClient(ChatMixin, GemMixin, ResearchMixin):
                 )
 
         # Video handling
+        # Gemini Web layouts:
+        # - legacy: candidate[12][59][0][0][0]
+        # - Jul 2026: candidate[12][8]["60"]...
+        # - Nov 2026: candidate[12][0]["60"]... (dict keys "8"/"60")
+        # Also scan candidate[12] for dicts with key "60" when the card moves.
         generated_videos = []
-        video_info = get_nested_value(candidate_data, [12, 59, 0, 0, 0], [])
-        if not video_info:
-            # Gemini Web's newer video response layout (observed July 2026)
-            # stores the generated video card under candidate[12][8]["60"].
-            # Keep the legacy path above for backwards compatibility.
-            video_info = get_nested_value(
-                candidate_data, [12, 8, "60", 0, 0, 0, 0], []
-            )
-        if video_info:
-            urls = get_nested_value(video_info, [0, 7], [])
-            if not urls:
-                urls = get_nested_value(video_info, [7], [])
-            if len(urls) >= 2:
-                generated_videos.append(
-                    GeneratedVideo(
-                        url=urls[1],
-                        thumbnail=urls[0],
-                        cid=cid,
-                        rid=rid,
-                        rcid=rcid,
-                        client_ref=self,
-                        proxy=self.proxy,
-                    )
+        video_urls = extract_generated_video_urls(candidate_data)
+        if video_urls:
+            thumbnail, url = video_urls
+            generated_videos.append(
+                GeneratedVideo(
+                    url=url,
+                    thumbnail=thumbnail,
+                    cid=cid,
+                    rid=rid,
+                    rcid=rcid,
+                    client_ref=self,
+                    proxy=self.proxy,
                 )
+            )
 
         # Media (Music) handling
         generated_media = []
